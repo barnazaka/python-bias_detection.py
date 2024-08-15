@@ -1,0 +1,87 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate a synthetic dataset
+num_samples = 1000
+age = np.random.randint(18, 65, num_samples)
+income = np.random.randint(20000, 120000, num_samples)
+education_level = np.random.choice(['High School', 'Bachelors', 'Masters', 'PhD'], num_samples)
+gender = np.random.choice([0, 1], num_samples)
+race = np.random.choice([0, 1, 2, 3, 4], num_samples)
+
+# Generate a binary outcome variable
+outcome = (0.3 * age + 0.2 * income/10000 + 0.1 * (education_level == 'PhD') +
+           0.2 * gender + 0.1 * (race == 1) + np.random.randn(num_samples)).round().astype(int)
+outcome = np.clip(outcome, 0, 1)
+
+# Ensure both classes are represented
+while len(np.unique(outcome)) < 2:
+    outcome = (0.3 * age + 0.2 * income/10000 + 0.1 * (education_level == 'PhD') +
+               0.2 * gender + 0.1 * (race == 1) + np.random.randn(num_samples)).round().astype(int)
+    outcome = np.clip(outcome, 0, 1)
+
+# Create DataFrame
+data = pd.DataFrame({
+    'age': age,
+    'income': income,
+    'education': education_level,
+    'gender': gender,
+    'race': race,
+    'outcome': outcome
+})
+
+# Preprocess the data
+X = data[['age', 'income', 'education', 'gender', 'race']]
+y = data['outcome']
+
+# Set up the preprocessing pipeline
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('edu', OneHotEncoder(), ['education'])  # One-hot encode the 'education' feature
+    ],
+    remainder='passthrough'  # Leave the other columns unchanged
+)
+
+# Create a pipeline with preprocessing and model
+pipeline = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('model', LogisticRegression())
+])
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Check class distribution in training data
+print("Unique classes in y_train:", np.unique(y_train))
+print("Class distribution in y_train:", pd.Series(y_train).value_counts())
+
+# Train the model
+pipeline.fit(X_train, y_train)
+
+# Predict the outcomes
+y_pred = pipeline.predict(X_test)
+
+# Evaluate the model
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
+
+# Extract and display model coefficients
+model = pipeline.named_steps['model']
+feature_names = pipeline.named_steps['preprocessor'].transformers_[0][1].get_feature_names_out()
+feature_names = np.append(feature_names, ['age', 'income', 'gender', 'race'])
+
+coef_df = pd.DataFrame(model.coef_.T, index=feature_names, columns=['Coefficient'])
+print("\nModel Coefficients (Indication of Feature Importance):")
+print(coef_df)
